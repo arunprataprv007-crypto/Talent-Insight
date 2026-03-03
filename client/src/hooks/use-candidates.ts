@@ -3,11 +3,14 @@ import { api, buildUrl } from "@shared/routes";
 import { type Candidate, type InsertCandidate } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
-export function useCandidates() {
+export function useCandidates(search?: string) {
   return useQuery({
-    queryKey: [api.candidates.list.path],
+    queryKey: [api.candidates.list.path, search],
     queryFn: async () => {
-      const res = await fetch(api.candidates.list.path, { credentials: "include" });
+      const url = search 
+        ? `${api.candidates.list.path}?search=${encodeURIComponent(search)}`
+        : api.candidates.list.path;
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch candidates");
       return (await res.json()) as Candidate[];
     },

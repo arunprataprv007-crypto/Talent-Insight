@@ -36,6 +36,7 @@ export const api = {
     list: {
       method: 'GET' as const,
       path: '/api/candidates' as const,
+      input: z.object({ search: z.string().optional() }).optional(),
       responses: { 200: z.array(z.any()) },
     },
     get: {

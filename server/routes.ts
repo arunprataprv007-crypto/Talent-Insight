@@ -70,8 +70,35 @@ export async function registerRoutes(
   });
 
   app.get(api.candidates.list.path, isAuthenticated, async (req: any, res) => {
-    const candidates = await storage.getCandidates(req.user.claims.sub);
-    res.json(candidates);
+    const { search } = req.query;
+    let candidateList = await storage.getCandidates(req.user.claims.sub);
+    
+    if (search && candidateList.length > 0) {
+      try {
+        const response = await openai.chat.completions.create({
+          model: "gpt-5.2",
+          messages: [
+            { role: "system", content: "You are an AI search assistant. Given a search query and a list of candidates, return only the IDs of candidates that match the query semantically. Return a JSON object with a single key 'matchedIds' containing an array of numbers. Candidates: " + JSON.stringify(candidateList.map(c => ({ id: c.id, name: c.name, headline: c.headline, summary: c.summary }))) },
+            { role: "user", content: `Search Query: ${search}` }
+          ],
+          response_format: { type: "json_object" },
+        });
+        
+        const aiResult = JSON.parse(response.choices[0].message.content || "{}");
+        const matchedIds = aiResult.matchedIds || [];
+        candidateList = candidateList.filter(c => matchedIds.includes(c.id));
+      } catch (e) {
+        console.error("AI Search failed:", e);
+        // Fallback to simple text search if AI fails
+        candidateList = candidateList.filter(c => 
+          c.name.toLowerCase().includes(search.toLowerCase()) || 
+          (c.headline?.toLowerCase().includes(search.toLowerCase())) ||
+          (c.summary?.toLowerCase().includes(search.toLowerCase()))
+        );
+      }
+    }
+    
+    res.json(candidateList);
   });
 
   app.get(api.candidates.get.path, isAuthenticated, async (req: any, res) => {
