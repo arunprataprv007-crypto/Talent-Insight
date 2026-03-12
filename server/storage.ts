@@ -1,10 +1,11 @@
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { 
-  jobs, candidates, matches, 
+  jobs, candidates, matches, sourcedLeads,
   type Job, type InsertJob, 
   type Candidate, type InsertCandidate, 
-  type Match, type InsertMatch 
+  type Match, type InsertMatch,
+  type SourcedLead, type InsertSourcedLead
 } from "@shared/schema";
 
 export interface IStorage {
@@ -25,6 +26,12 @@ export interface IStorage {
   getMatch(id: number, userId: string): Promise<(Match & { job: Job, candidate: Candidate }) | undefined>;
   createMatch(match: InsertMatch): Promise<Match>;
   updateMatch(id: number, updates: Partial<Match>): Promise<Match | undefined>;
+
+  // Sourced Leads
+  getSourcedLeads(userId: string): Promise<SourcedLead[]>;
+  getSourcedLead(id: number, userId: string): Promise<SourcedLead | undefined>;
+  createSourcedLead(userId: string, lead: InsertSourcedLead): Promise<SourcedLead>;
+  updateSourcedLead(id: number, userId: string, updates: Partial<SourcedLead>): Promise<SourcedLead | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -124,6 +131,29 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(matches)
       .set(updates)
       .where(eq(matches.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getSourcedLeads(userId: string): Promise<SourcedLead[]> {
+    return await db.select().from(sourcedLeads).where(eq(sourcedLeads.userId, userId));
+  }
+
+  async getSourcedLead(id: number, userId: string): Promise<SourcedLead | undefined> {
+    const [lead] = await db.select().from(sourcedLeads)
+      .where(and(eq(sourcedLeads.id, id), eq(sourcedLeads.userId, userId)));
+    return lead;
+  }
+
+  async createSourcedLead(userId: string, lead: InsertSourcedLead): Promise<SourcedLead> {
+    const [newLead] = await db.insert(sourcedLeads).values({ ...lead, userId }).returning();
+    return newLead;
+  }
+
+  async updateSourcedLead(id: number, userId: string, updates: Partial<SourcedLead>): Promise<SourcedLead | undefined> {
+    const [updated] = await db.update(sourcedLeads)
+      .set(updates)
+      .where(and(eq(sourcedLeads.id, id), eq(sourcedLeads.userId, userId)))
       .returning();
     return updated;
   }

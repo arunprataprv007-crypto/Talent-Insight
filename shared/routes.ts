@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertJobSchema, insertCandidateSchema, insertMatchSchema } from './schema';
+import { insertJobSchema, insertCandidateSchema, insertMatchSchema, insertSourcedLeadSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({ message: z.string(), field: z.string().optional() }),
@@ -80,6 +80,41 @@ export const api = {
       input: z.object({ status: z.string() }),
       responses: { 200: z.any(), 404: errorSchemas.notFound },
     }
+  },
+  sourcing: {
+    leads: {
+      list: {
+        method: 'GET' as const,
+        path: '/api/sourcing/leads' as const,
+        responses: { 200: z.array(z.any()) },
+      },
+      create: {
+        method: 'POST' as const,
+        path: '/api/sourcing/leads' as const,
+        input: insertSourcedLeadSchema,
+        responses: { 201: z.any() },
+      },
+      import: {
+        method: 'POST' as const,
+        path: '/api/sourcing/leads/:id/import' as const,
+        responses: { 200: z.any(), 404: errorSchemas.notFound },
+      },
+      dismiss: {
+        method: 'PATCH' as const,
+        path: '/api/sourcing/leads/:id/dismiss' as const,
+        responses: { 200: z.any(), 404: errorSchemas.notFound },
+      },
+    },
+    search: {
+      method: 'GET' as const,
+      path: '/api/sourcing/search' as const,
+      responses: { 200: z.any() },
+    },
+    config: {
+      method: 'GET' as const,
+      path: '/api/sourcing/config' as const,
+      responses: { 200: z.any() },
+    },
   },
 };
 

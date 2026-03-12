@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { BrainCircuit, Briefcase, Users, LayoutDashboard, GitMerge, LogOut, Loader2, Search, Sparkles, X } from "lucide-react";
+import { BrainCircuit, Briefcase, Users, LayoutDashboard, GitMerge, LogOut, Loader2, Search, Sparkles, X, Globe } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ const navItems = [
   { icon: Briefcase, label: "Jobs", href: "/jobs" },
   { icon: Users, label: "Candidates", href: "/candidates" },
   { icon: GitMerge, label: "Matches", href: "/matches" },
+  { icon: Globe, label: "Sourcing", href: "/sourcing" },
 ];
 
 function GlobalSearchBar() {

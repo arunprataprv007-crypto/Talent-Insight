@@ -29,6 +29,8 @@ export const candidates = pgTable("candidates", {
   skills: jsonb("skills"), 
   experience: jsonb("experience"),
   education: jsonb("education"),
+  sourcePlatform: text("source_platform"),
+  sourceProfileUrl: text("source_profile_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -40,6 +42,20 @@ export const matches = pgTable("matches", {
   analysis: text("analysis"),
   inMailDraft: text("inmail_draft"),
   status: text("status").default("new").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sourcedLeads = pgTable("sourced_leads", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  platform: text("platform").notNull(),
+  name: text("name").notNull(),
+  headline: text("headline"),
+  profileUrl: text("profile_url"),
+  summary: text("summary"),
+  skills: jsonb("skills"),
+  status: text("status").default("new").notNull(),
+  importedCandidateId: integer("imported_candidate_id").references(() => candidates.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -71,6 +87,9 @@ export const insertCandidateSchema = createInsertSchema(candidates).omit({
 export const insertMatchSchema = createInsertSchema(matches).omit({ 
   id: true, score: true, analysis: true, inMailDraft: true, status: true, createdAt: true 
 });
+export const insertSourcedLeadSchema = createInsertSchema(sourcedLeads).omit({
+  id: true, userId: true, status: true, importedCandidateId: true, createdAt: true
+});
 
 export type Job = typeof jobs.$inferSelect;
 export type InsertJob = z.infer<typeof insertJobSchema>;
@@ -78,3 +97,5 @@ export type Candidate = typeof candidates.$inferSelect;
 export type InsertCandidate = z.infer<typeof insertCandidateSchema>;
 export type Match = typeof matches.$inferSelect;
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
+export type SourcedLead = typeof sourcedLeads.$inferSelect;
+export type InsertSourcedLead = z.infer<typeof insertSourcedLeadSchema>;

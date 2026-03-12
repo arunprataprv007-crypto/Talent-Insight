@@ -89,7 +89,6 @@ export async function registerRoutes(
         candidateList = candidateList.filter(c => matchedIds.includes(c.id));
       } catch (e) {
         console.error("AI Search failed:", e);
-        // Fallback to simple text search if AI fails
         candidateList = candidateList.filter(c => 
           c.name.toLowerCase().includes(search.toLowerCase()) || 
           (c.headline?.toLowerCase().includes(search.toLowerCase())) ||
@@ -189,6 +188,123 @@ export async function registerRoutes(
     } catch (err) {
       res.status(400).json({ message: "Invalid request" });
     }
+  });
+
+  // ── Sourcing Routes ─────────────────────────────────────────────────────────
+
+  app.get(api.sourcing.config.path, isAuthenticated, async (_req, res) => {
+    res.json({
+      adzunaConfigured: !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
+      reedConfigured: !!process.env.REED_API_KEY,
+    });
+  });
+
+  app.get(api.sourcing.search.path, isAuthenticated, async (req: any, res) => {
+    const { platform, query, country = "gb" } = req.query as Record<string, string>;
+
+    if (!query) return res.status(400).json({ message: "query is required" });
+
+    try {
+      if (platform === "adzuna") {
+        const appId = process.env.ADZUNA_APP_ID;
+        const appKey = process.env.ADZUNA_APP_KEY;
+        if (!appId || !appKey) {
+          return res.status(400).json({ message: "Adzuna API credentials not configured. Add ADZUNA_APP_ID and ADZUNA_APP_KEY to your environment secrets." });
+        }
+        const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId}&app_key=${appKey}&what=${encodeURIComponent(query)}&results_per_page=20&content-type=application/json`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Adzuna API error: ${response.status}`);
+        const data = await response.json() as any;
+        const results = (data.results || []).map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          company: r.company?.display_name,
+          location: r.location?.display_name,
+          description: r.description,
+          url: r.redirect_url,
+          salary: r.salary_min ? `£${Math.round(r.salary_min / 1000)}k – £${Math.round((r.salary_max || r.salary_min) / 1000)}k` : null,
+          created: r.created,
+        }));
+        return res.json({ platform: "adzuna", count: data.count || 0, results });
+      }
+
+      if (platform === "reed") {
+        const apiKey = process.env.REED_API_KEY;
+        if (!apiKey) {
+          return res.status(400).json({ message: "Reed API key not configured. Add REED_API_KEY to your environment secrets." });
+        }
+        const url = `https://www.reed.co.uk/api/1.0/search?keywords=${encodeURIComponent(query)}&resultsToTake=20`;
+        const credentials = Buffer.from(`${apiKey}:`).toString("base64");
+        const response = await fetch(url, {
+          headers: { Authorization: `Basic ${credentials}`, Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`Reed API error: ${response.status}`);
+        const data = await response.json() as any;
+        const results = (data.results || []).map((r: any) => ({
+          id: r.jobId,
+          title: r.jobTitle,
+          company: r.employerName,
+          location: r.locationName,
+          description: r.jobDescription,
+          url: r.jobUrl,
+          salary: r.minimumSalary ? `£${Math.round(r.minimumSalary / 1000)}k – £${Math.round((r.maximumSalary || r.minimumSalary) / 1000)}k` : null,
+          created: r.date,
+        }));
+        return res.json({ platform: "reed", count: results.length, results });
+      }
+
+      return res.status(400).json({ message: `Platform '${platform}' does not support live API search.` });
+
+    } catch (e: any) {
+      console.error("Sourcing search error:", e);
+      res.status(500).json({ message: e.message || "Search failed" });
+    }
+  });
+
+  app.get(api.sourcing.leads.list.path, isAuthenticated, async (req: any, res) => {
+    const leads = await storage.getSourcedLeads(req.user.claims.sub);
+    res.json(leads);
+  });
+
+  app.post(api.sourcing.leads.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.sourcing.leads.create.input.parse(req.body);
+      const lead = await storage.createSourcedLead(req.user.claims.sub, input);
+      res.status(201).json(lead);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post(api.sourcing.leads.import.path, isAuthenticated, async (req: any, res) => {
+    const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+    const candidate = await storage.createCandidate(req.user.claims.sub, {
+      name: lead.name,
+      headline: lead.headline ?? undefined,
+      summary: lead.summary ?? undefined,
+      linkedinUrl: lead.profileUrl ?? undefined,
+      sourcePlatform: lead.platform,
+      sourceProfileUrl: lead.profileUrl ?? undefined,
+    } as any);
+
+    await storage.updateSourcedLead(lead.id, req.user.claims.sub, {
+      status: "imported",
+      importedCandidateId: candidate.id,
+    });
+
+    res.json({ candidate, lead });
+  });
+
+  app.patch(api.sourcing.leads.dismiss.path, isAuthenticated, async (req: any, res) => {
+    const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    const updated = await storage.updateSourcedLead(lead.id, req.user.claims.sub, { status: "dismissed" });
+    res.json(updated);
   });
 
   return httpServer;
