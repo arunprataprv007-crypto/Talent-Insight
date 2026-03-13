@@ -26,7 +26,7 @@ export const candidates = pgTable("candidates", {
   name: text("name").notNull(),
   headline: text("headline"),
   summary: text("summary"),
-  skills: jsonb("skills"), 
+  skills: jsonb("skills"),
   experience: jsonb("experience"),
   education: jsonb("education"),
   sourcePlatform: text("source_platform"),
@@ -42,6 +42,9 @@ export const matches = pgTable("matches", {
   analysis: text("analysis"),
   inMailDraft: text("inmail_draft"),
   status: text("status").default("new").notNull(),
+  screeningStatus: text("screening_status").default("new").notNull(),
+  screeningQuestions: jsonb("screening_questions"),
+  criteriaScores: jsonb("criteria_scores"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -68,24 +71,19 @@ export const candidatesRelations = relations(candidates, ({ many }) => ({
 }));
 
 export const matchesRelations = relations(matches, ({ one }) => ({
-  job: one(jobs, {
-    fields: [matches.jobId],
-    references: [jobs.id],
-  }),
-  candidate: one(candidates, {
-    fields: [matches.candidateId],
-    references: [candidates.id],
-  }),
+  job: one(jobs, { fields: [matches.jobId], references: [jobs.id] }),
+  candidate: one(candidates, { fields: [matches.candidateId], references: [candidates.id] }),
 }));
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ 
-  id: true, userId: true, parsedRequirements: true, booleanStrings: true, hiringManager: true, createdAt: true 
+export const insertJobSchema = createInsertSchema(jobs).omit({
+  id: true, userId: true, parsedRequirements: true, booleanStrings: true, hiringManager: true, createdAt: true
 });
-export const insertCandidateSchema = createInsertSchema(candidates).omit({ 
+export const insertCandidateSchema = createInsertSchema(candidates).omit({
   id: true, userId: true, createdAt: true, skills: true, experience: true, education: true
 });
-export const insertMatchSchema = createInsertSchema(matches).omit({ 
-  id: true, score: true, analysis: true, inMailDraft: true, status: true, createdAt: true 
+export const insertMatchSchema = createInsertSchema(matches).omit({
+  id: true, score: true, analysis: true, inMailDraft: true, status: true,
+  screeningStatus: true, screeningQuestions: true, criteriaScores: true, createdAt: true
 });
 export const insertSourcedLeadSchema = createInsertSchema(sourcedLeads).omit({
   id: true, userId: true, status: true, importedCandidateId: true, createdAt: true

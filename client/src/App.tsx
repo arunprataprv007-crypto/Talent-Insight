@@ -16,6 +16,7 @@ import CandidateDetailPage from "@/pages/candidate-detail";
 import MatchesPage from "@/pages/matches";
 import MatchDetailPage from "@/pages/match-detail";
 import SourcingPage from "@/pages/sourcing";
+import ScreeningDashboard from "@/pages/screening";
 import { Layout } from "@/components/layout";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/matches" component={() => <ProtectedRoute component={MatchesPage} />} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetailPage} />} />
       <Route path="/sourcing" component={() => <ProtectedRoute component={SourcingPage} />} />
+      <Route path="/screening" component={() => <ProtectedRoute component={ScreeningDashboard} />} />
       <Route component={NotFound} />
     </Switch>
   );

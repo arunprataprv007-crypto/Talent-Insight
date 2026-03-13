@@ -11,10 +11,9 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+
+  // ── Jobs ─────────────────────────────────────────────────────────────────────
 
   app.get(api.jobs.list.path, isAuthenticated, async (req: any, res) => {
     const jobs = await storage.getJobs(req.user.claims.sub);
@@ -24,7 +23,6 @@ export async function registerRoutes(
   app.get(api.jobs.get.path, isAuthenticated, async (req: any, res) => {
     const job = await storage.getJob(Number(req.params.id), req.user.claims.sub);
     if (!job) return res.status(404).json({ message: "Job not found" });
-    
     const jobMatches = await storage.getMatches(req.user.claims.sub, job.id);
     res.json({ ...job, matches: jobMatches });
   });
@@ -35,32 +33,44 @@ export async function registerRoutes(
       const job = await storage.createJob(req.user.claims.sub, input);
       res.status(201).json(job);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
   });
 
+  // JD Parsing — Feature #2
   app.post(api.jobs.parse.path, isAuthenticated, async (req: any, res) => {
     const job = await storage.getJob(Number(req.params.id), req.user.claims.sub);
     if (!job) return res.status(404).json({ message: "Job not found" });
-
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
         messages: [
-          { role: "system", content: "You are an expert technical recruiter. Parse this job description and extract key requirements as a JSON array of strings under 'requirements'. Then generate 3 different LinkedIn Recruiter boolean search strings in a JSON array under 'booleanStrings'. The output MUST be a valid JSON object." },
+          {
+            role: "system",
+            content: `You are an expert technical recruiter. Parse this job description and return a JSON object with:
+- "requirements": array of strings (key technical & soft skills/experience needed)
+- "booleanStrings": array of 3 different LinkedIn Recruiter boolean search strings
+- "mustHave": array of strings (non-negotiable requirements)
+- "niceToHave": array of strings (preferred but not required)
+- "experienceLevel": string (Junior/Mid/Senior/Lead/Principal)
+- "summary": string (2-sentence role summary for recruiters)
+Output MUST be valid JSON.`
+          },
           { role: "user", content: `Job Title: ${job.title}\nCompany: ${job.company}\nDescription: ${job.description}` }
         ],
         response_format: { type: "json_object" },
       });
-      
       const aiResult = JSON.parse(response.choices[0].message.content || "{}");
-      
       const updated = await storage.updateJob(job.id, req.user.claims.sub, {
-        parsedRequirements: aiResult.requirements || [],
-        booleanStrings: aiResult.booleanStrings || []
+        parsedRequirements: {
+          requirements: aiResult.requirements || [],
+          mustHave: aiResult.mustHave || [],
+          niceToHave: aiResult.niceToHave || [],
+          experienceLevel: aiResult.experienceLevel || "",
+          summary: aiResult.summary || "",
+        },
+        booleanStrings: aiResult.booleanStrings || [],
       });
       res.json(updated);
     } catch (e) {
@@ -69,10 +79,45 @@ export async function registerRoutes(
     }
   });
 
+  // Semantic Ranking — Feature #7
+  app.post(api.jobs.rankCandidates.path, isAuthenticated, async (req: any, res) => {
+    const job = await storage.getJob(Number(req.params.id), req.user.claims.sub);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    const allCandidates = await storage.getCandidates(req.user.claims.sub);
+    if (!allCandidates.length) return res.json({ rankings: [] });
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [
+          {
+            role: "system",
+            content: `You are a senior technical recruiter. Rank the provided candidates by their fit for the job. Return JSON with "rankings": array of objects {candidateId, score (0-100), reason (1 sentence)}, sorted best-first.`
+          },
+          {
+            role: "user",
+            content: `Job: ${JSON.stringify({ title: job.title, company: job.company, requirements: job.parsedRequirements })}\n\nCandidates: ${JSON.stringify(allCandidates.map(c => ({ id: c.id, name: c.name, headline: c.headline, summary: c.summary, skills: c.skills })))}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+      const aiResult = JSON.parse(response.choices[0].message.content || "{}");
+      const candidateMap = Object.fromEntries(allCandidates.map(c => [c.id, c]));
+      const rankings = (aiResult.rankings || []).map((r: any) => ({
+        ...r,
+        candidate: candidateMap[r.candidateId],
+      }));
+      res.json({ rankings });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Ranking failed" });
+    }
+  });
+
+  // ── Candidates ───────────────────────────────────────────────────────────────
+
   app.get(api.candidates.list.path, isAuthenticated, async (req: any, res) => {
     const { search } = req.query;
     let candidateList = await storage.getCandidates(req.user.claims.sub);
-    
     if (search && candidateList.length > 0) {
       try {
         const response = await openai.chat.completions.create({
@@ -83,20 +128,18 @@ export async function registerRoutes(
           ],
           response_format: { type: "json_object" },
         });
-        
         const aiResult = JSON.parse(response.choices[0].message.content || "{}");
         const matchedIds = aiResult.matchedIds || [];
         candidateList = candidateList.filter(c => matchedIds.includes(c.id));
       } catch (e) {
         console.error("AI Search failed:", e);
-        candidateList = candidateList.filter(c => 
-          c.name.toLowerCase().includes(search.toLowerCase()) || 
-          (c.headline?.toLowerCase().includes(search.toLowerCase())) ||
-          (c.summary?.toLowerCase().includes(search.toLowerCase()))
+        candidateList = candidateList.filter(c =>
+          c.name.toLowerCase().includes((search as string).toLowerCase()) ||
+          (c.headline?.toLowerCase().includes((search as string).toLowerCase())) ||
+          (c.summary?.toLowerCase().includes((search as string).toLowerCase()))
         );
       }
     }
-    
     res.json(candidateList);
   });
 
@@ -112,17 +155,49 @@ export async function registerRoutes(
       const candidate = await storage.createCandidate(req.user.claims.sub, input);
       res.status(201).json(candidate);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
   });
 
+  // CV Parsing — Feature #1
+  app.post(api.candidates.parseCv.path, isAuthenticated, async (req: any, res) => {
+    const { cvText } = req.body;
+    if (!cvText) return res.status(400).json({ message: "cvText is required" });
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert recruiter parsing a candidate's CV/resume. Extract all available information and return a JSON object with:
+- "name": full name (string)
+- "headline": current job title or professional headline (string)
+- "summary": 2-3 sentence professional summary (string)
+- "linkedinUrl": linkedin URL if mentioned (string or null)
+- "skills": array of skill strings
+- "experience": array of {company, title, startDate, endDate, description} objects
+- "education": array of {institution, degree, field, year} objects
+Output MUST be valid JSON.`
+          },
+          { role: "user", content: cvText }
+        ],
+        response_format: { type: "json_object" },
+      });
+      const parsed = JSON.parse(response.choices[0].message.content || "{}");
+      res.json(parsed);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "CV parsing failed" });
+    }
+  });
+
+  // ── Matches ───────────────────────────────────────────────────────────────────
+
   app.get(api.matches.list.path, isAuthenticated, async (req: any, res) => {
     const { jobId, candidateId } = req.query;
     const matches = await storage.getMatches(
-      req.user.claims.sub, 
+      req.user.claims.sub,
       jobId ? Number(jobId) : undefined,
       candidateId ? Number(candidateId) : undefined
     );
@@ -135,9 +210,7 @@ export async function registerRoutes(
       const match = await storage.createMatch(input);
       res.status(201).json(match);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
   });
@@ -148,27 +221,34 @@ export async function registerRoutes(
     res.json(match);
   });
 
+  // AI Scoring + Analysis — Feature #3
   app.post(api.matches.generateAnalysis.path, isAuthenticated, async (req: any, res) => {
     const match = await storage.getMatch(Number(req.params.id), req.user.claims.sub);
     if (!match) return res.status(404).json({ message: "Match not found" });
-
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
         messages: [
-          { role: "system", content: "You are an expert technical recruiter. Analyze the fit between the candidate and the job. Produce JSON with: 'score' (0 to 100), 'analysis' (string explaining the score), 'inMail' (string containing a personalized LinkedIn InMail to pitch the job to the candidate). Ensure the response is valid JSON." },
+          {
+            role: "system",
+            content: `You are an expert technical recruiter. Analyze the fit between the candidate and the job. Return JSON with:
+- "score": overall fit score 0-100
+- "criteriaScores": object with scores for {technical (0-100), experience (0-100), domain (0-100), culture (0-100)}
+- "analysis": detailed paragraph explaining the overall fit, strengths, and gaps
+- "inMail": personalized LinkedIn InMail draft to pitch the role to the candidate
+Output MUST be valid JSON.`
+          },
           { role: "user", content: `Job:\n${JSON.stringify(match.job)}\n\nCandidate:\n${JSON.stringify(match.candidate)}` }
         ],
         response_format: { type: "json_object" },
       });
-      
       const aiResult = JSON.parse(response.choices[0].message.content || "{}");
-      
       const updated = await storage.updateMatch(match.id, {
         score: aiResult.score || 0,
+        criteriaScores: aiResult.criteriaScores || {},
         analysis: aiResult.analysis || "No analysis generated",
         inMailDraft: aiResult.inMail || "No InMail generated",
-        status: "analyzed"
+        status: "analyzed",
       });
       res.json(updated);
     } catch (e) {
@@ -177,20 +257,106 @@ export async function registerRoutes(
     }
   });
 
+  // AI Interview Questions — Feature #4
+  app.post(api.matches.generateQuestions.path, isAuthenticated, async (req: any, res) => {
+    const match = await storage.getMatch(Number(req.params.id), req.user.claims.sub);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [
+          {
+            role: "system",
+            content: `You are a senior technical recruiter and interviewer. Generate tailored screening interview questions for this candidate-job pairing. Return JSON with "questions": array of objects, each with:
+- "question": the question text
+- "category": one of "Technical", "Behavioral", "Role-Specific", "Culture Fit"
+- "difficulty": one of "Screening", "Intermediate", "Deep Dive"
+- "rationale": why this question is relevant for this candidate+role (1 sentence)
+Generate 10-12 questions total, covering all categories.`
+          },
+          {
+            role: "user",
+            content: `Job: ${JSON.stringify({ title: match.job.title, company: match.job.company, requirements: match.job.parsedRequirements })}\n\nCandidate: ${JSON.stringify({ name: match.candidate.name, headline: match.candidate.headline, summary: match.candidate.summary, skills: match.candidate.skills, experience: match.candidate.experience })}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+      const aiResult = JSON.parse(response.choices[0].message.content || "{}");
+      const updated = await storage.updateMatch(match.id, {
+        screeningQuestions: aiResult.questions || [],
+      });
+      res.json(updated);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Question generation failed" });
+    }
+  });
+
   app.patch(api.matches.updateStatus.path, isAuthenticated, async (req: any, res) => {
     const match = await storage.getMatch(Number(req.params.id), req.user.claims.sub);
     if (!match) return res.status(404).json({ message: "Match not found" });
-
     try {
       const { status } = req.body;
       const updated = await storage.updateMatch(match.id, { status });
       res.json(updated);
-    } catch (err) {
+    } catch {
       res.status(400).json({ message: "Invalid request" });
     }
   });
 
-  // ── Sourcing Routes ─────────────────────────────────────────────────────────
+  app.patch(api.matches.updateScreeningStatus.path, isAuthenticated, async (req: any, res) => {
+    const match = await storage.getMatch(Number(req.params.id), req.user.claims.sub);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+    const { screeningStatus } = req.body;
+    const updated = await storage.updateMatch(match.id, { screeningStatus });
+    res.json(updated);
+  });
+
+  // ── Screening Stats — Feature #5 ─────────────────────────────────────────────
+
+  app.get(api.screening.stats.path, isAuthenticated, async (req: any, res) => {
+    const matches = await storage.getMatches(req.user.claims.sub);
+    const candidates = await storage.getCandidates(req.user.claims.sub);
+    const jobs = await storage.getJobs(req.user.claims.sub);
+
+    const analyzed = matches.filter(m => m.score !== null && m.score !== undefined);
+    const stages = {
+      new: matches.filter(m => m.screeningStatus === "new").length,
+      shortlisted: matches.filter(m => m.screeningStatus === "shortlisted").length,
+      screening: matches.filter(m => m.screeningStatus === "screening").length,
+      interviewing: matches.filter(m => m.screeningStatus === "interviewing").length,
+      offered: matches.filter(m => m.screeningStatus === "offered").length,
+      rejected: matches.filter(m => m.screeningStatus === "rejected").length,
+    };
+
+    const scoreDistribution = [
+      { range: "90-100", count: analyzed.filter(m => (m.score || 0) >= 90).length },
+      { range: "75-89", count: analyzed.filter(m => (m.score || 0) >= 75 && (m.score || 0) < 90).length },
+      { range: "60-74", count: analyzed.filter(m => (m.score || 0) >= 60 && (m.score || 0) < 75).length },
+      { range: "45-59", count: analyzed.filter(m => (m.score || 0) >= 45 && (m.score || 0) < 60).length },
+      { range: "<45", count: analyzed.filter(m => (m.score || 0) < 45).length },
+    ];
+
+    const topMatches = analyzed
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 8);
+
+    res.json({
+      totals: {
+        jobs: jobs.length,
+        candidates: candidates.length,
+        matches: matches.length,
+        analyzed: analyzed.length,
+        avgScore: analyzed.length ? Math.round(analyzed.reduce((s, m) => s + (m.score || 0), 0) / analyzed.length) : 0,
+        highScorers: analyzed.filter(m => (m.score || 0) >= 80).length,
+      },
+      stages,
+      scoreDistribution,
+      topMatches,
+    });
+  });
+
+  // ── Sourcing ──────────────────────────────────────────────────────────────────
 
   app.get(api.sourcing.config.path, isAuthenticated, async (_req, res) => {
     res.json({
@@ -201,60 +367,43 @@ export async function registerRoutes(
 
   app.get(api.sourcing.search.path, isAuthenticated, async (req: any, res) => {
     const { platform, query, country = "gb" } = req.query as Record<string, string>;
-
     if (!query) return res.status(400).json({ message: "query is required" });
-
     try {
       if (platform === "adzuna") {
         const appId = process.env.ADZUNA_APP_ID;
         const appKey = process.env.ADZUNA_APP_KEY;
-        if (!appId || !appKey) {
-          return res.status(400).json({ message: "Adzuna API credentials not configured. Add ADZUNA_APP_ID and ADZUNA_APP_KEY to your environment secrets." });
-        }
+        if (!appId || !appKey) return res.status(400).json({ message: "Adzuna API credentials not configured. Add ADZUNA_APP_ID and ADZUNA_APP_KEY to your environment secrets." });
         const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId}&app_key=${appKey}&what=${encodeURIComponent(query)}&results_per_page=20&content-type=application/json`;
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Adzuna API error: ${response.status}`);
         const data = await response.json() as any;
-        const results = (data.results || []).map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          company: r.company?.display_name,
-          location: r.location?.display_name,
-          description: r.description,
-          url: r.redirect_url,
-          salary: r.salary_min ? `£${Math.round(r.salary_min / 1000)}k – £${Math.round((r.salary_max || r.salary_min) / 1000)}k` : null,
-          created: r.created,
-        }));
-        return res.json({ platform: "adzuna", count: data.count || 0, results });
+        return res.json({
+          platform: "adzuna", count: data.count || 0,
+          results: (data.results || []).map((r: any) => ({
+            id: r.id, title: r.title, company: r.company?.display_name,
+            location: r.location?.display_name, description: r.description,
+            url: r.redirect_url, salary: r.salary_min ? `£${Math.round(r.salary_min / 1000)}k – £${Math.round((r.salary_max || r.salary_min) / 1000)}k` : null,
+          })),
+        });
       }
-
       if (platform === "reed") {
         const apiKey = process.env.REED_API_KEY;
-        if (!apiKey) {
-          return res.status(400).json({ message: "Reed API key not configured. Add REED_API_KEY to your environment secrets." });
-        }
+        if (!apiKey) return res.status(400).json({ message: "Reed API key not configured. Add REED_API_KEY to your environment secrets." });
         const url = `https://www.reed.co.uk/api/1.0/search?keywords=${encodeURIComponent(query)}&resultsToTake=20`;
         const credentials = Buffer.from(`${apiKey}:`).toString("base64");
-        const response = await fetch(url, {
-          headers: { Authorization: `Basic ${credentials}`, Accept: "application/json" },
-        });
+        const response = await fetch(url, { headers: { Authorization: `Basic ${credentials}`, Accept: "application/json" } });
         if (!response.ok) throw new Error(`Reed API error: ${response.status}`);
         const data = await response.json() as any;
-        const results = (data.results || []).map((r: any) => ({
-          id: r.jobId,
-          title: r.jobTitle,
-          company: r.employerName,
-          location: r.locationName,
-          description: r.jobDescription,
-          url: r.jobUrl,
-          salary: r.minimumSalary ? `£${Math.round(r.minimumSalary / 1000)}k – £${Math.round((r.maximumSalary || r.minimumSalary) / 1000)}k` : null,
-          created: r.date,
-        }));
-        return res.json({ platform: "reed", count: results.length, results });
+        return res.json({
+          platform: "reed", count: (data.results || []).length,
+          results: (data.results || []).map((r: any) => ({
+            id: r.jobId, title: r.jobTitle, company: r.employerName,
+            location: r.locationName, description: r.jobDescription,
+            url: r.jobUrl, salary: r.minimumSalary ? `£${Math.round(r.minimumSalary / 1000)}k – £${Math.round((r.maximumSalary || r.minimumSalary) / 1000)}k` : null,
+          })),
+        });
       }
-
       return res.status(400).json({ message: `Platform '${platform}' does not support live API search.` });
-
     } catch (e: any) {
       console.error("Sourcing search error:", e);
       res.status(500).json({ message: e.message || "Search failed" });
@@ -262,19 +411,15 @@ export async function registerRoutes(
   });
 
   app.get(api.sourcing.leads.list.path, isAuthenticated, async (req: any, res) => {
-    const leads = await storage.getSourcedLeads(req.user.claims.sub);
-    res.json(leads);
+    res.json(await storage.getSourcedLeads(req.user.claims.sub));
   });
 
   app.post(api.sourcing.leads.create.path, isAuthenticated, async (req: any, res) => {
     try {
       const input = api.sourcing.leads.create.input.parse(req.body);
-      const lead = await storage.createSourcedLead(req.user.claims.sub, input);
-      res.status(201).json(lead);
+      res.status(201).json(await storage.createSourcedLead(req.user.claims.sub, input));
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
   });
@@ -282,7 +427,6 @@ export async function registerRoutes(
   app.post(api.sourcing.leads.import.path, isAuthenticated, async (req: any, res) => {
     const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
-
     const candidate = await storage.createCandidate(req.user.claims.sub, {
       name: lead.name,
       headline: lead.headline ?? undefined,
@@ -291,20 +435,14 @@ export async function registerRoutes(
       sourcePlatform: lead.platform,
       sourceProfileUrl: lead.profileUrl ?? undefined,
     } as any);
-
-    await storage.updateSourcedLead(lead.id, req.user.claims.sub, {
-      status: "imported",
-      importedCandidateId: candidate.id,
-    });
-
+    await storage.updateSourcedLead(lead.id, req.user.claims.sub, { status: "imported", importedCandidateId: candidate.id });
     res.json({ candidate, lead });
   });
 
   app.patch(api.sourcing.leads.dismiss.path, isAuthenticated, async (req: any, res) => {
     const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
-    const updated = await storage.updateSourcedLead(lead.id, req.user.claims.sub, { status: "dismissed" });
-    res.json(updated);
+    res.json(await storage.updateSourcedLead(lead.id, req.user.claims.sub, { status: "dismissed" }));
   });
 
   return httpServer;
