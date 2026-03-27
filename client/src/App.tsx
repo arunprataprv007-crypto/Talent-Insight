@@ -19,6 +19,7 @@ import SourcingPage from "@/pages/sourcing";
 import ScreeningDashboard from "@/pages/screening";
 import BooleanGeneratorPage from "@/pages/boolean-generator";
 import TrainingPage from "@/pages/training";
+import CommunicationsPage from "@/pages/communications";
 import { Layout } from "@/components/layout";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/screening" component={() => <ProtectedRoute component={ScreeningDashboard} />} />
       <Route path="/boolean" component={() => <ProtectedRoute component={BooleanGeneratorPage} />} />
       <Route path="/training" component={() => <ProtectedRoute component={TrainingPage} />} />
+      <Route path="/communications" component={() => <ProtectedRoute component={CommunicationsPage} />} />
       <Route component={NotFound} />
     </Switch>
   );

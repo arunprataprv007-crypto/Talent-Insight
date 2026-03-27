@@ -53,6 +53,33 @@ export function useCreateJob() {
   });
 }
 
+export function useUpdateJobStatus() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const url = buildUrl(api.jobs.updateStatus.path, { id });
+      const res = await fetch(url, {
+        method: api.jobs.updateStatus.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update job status");
+      return (await res.json()) as Job;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      toast({ title: "Job status updated" });
+    },
+    onError: (err) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  });
+}
+
 export function useParseJob() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

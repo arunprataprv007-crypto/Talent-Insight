@@ -1,11 +1,12 @@
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { 
-  jobs, candidates, matches, sourcedLeads,
+  jobs, candidates, matches, sourcedLeads, communications,
   type Job, type InsertJob, 
   type Candidate, type InsertCandidate, 
   type Match, type InsertMatch,
-  type SourcedLead, type InsertSourcedLead
+  type SourcedLead, type InsertSourcedLead,
+  type Communication, type InsertCommunication
 } from "@shared/schema";
 
 export interface IStorage {
@@ -32,6 +33,11 @@ export interface IStorage {
   getSourcedLead(id: number, userId: string): Promise<SourcedLead | undefined>;
   createSourcedLead(userId: string, lead: InsertSourcedLead): Promise<SourcedLead>;
   updateSourcedLead(id: number, userId: string, updates: Partial<SourcedLead>): Promise<SourcedLead | undefined>;
+
+  // Communications
+  getCommunications(userId: string, candidateId?: number): Promise<Communication[]>;
+  createCommunication(userId: string, comm: InsertCommunication): Promise<Communication>;
+  updateCommunication(id: number, updates: Partial<Communication>): Promise<Communication | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -154,6 +160,27 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(sourcedLeads)
       .set(updates)
       .where(and(eq(sourcedLeads.id, id), eq(sourcedLeads.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async getCommunications(userId: string, candidateId?: number): Promise<Communication[]> {
+    const allComms = await db.select().from(communications)
+      .where(eq(communications.userId, userId))
+      .orderBy(desc(communications.createdAt));
+    if (candidateId) return allComms.filter(c => c.candidateId === candidateId);
+    return allComms;
+  }
+
+  async createCommunication(userId: string, comm: InsertCommunication): Promise<Communication> {
+    const [newComm] = await db.insert(communications).values({ ...comm, userId }).returning();
+    return newComm;
+  }
+
+  async updateCommunication(id: number, updates: Partial<Communication>): Promise<Communication | undefined> {
+    const [updated] = await db.update(communications)
+      .set(updates)
+      .where(eq(communications.id, id))
       .returning();
     return updated;
   }

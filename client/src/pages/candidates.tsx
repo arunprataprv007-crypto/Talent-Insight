@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { Link } from "wouter";
 import { useCandidates, useCreateCandidate } from "@/hooks/use-candidates";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, UserCircle, Linkedin, Loader2, ChevronRight, Search, Sparkles, X, FileText, BrainCircuit, CheckCircle2 } from "lucide-react";
+import { Plus, UserCircle, Linkedin, Loader2, ChevronRight, Search, Sparkles, X, FileText, BrainCircuit, CheckCircle2, Upload, File } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCandidateSchema, type InsertCandidate } from "@shared/schema";
@@ -19,15 +19,38 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void }) {
+  const [mode, setMode] = useState<"paste" | "file">("file");
   const [cvText, setCvText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const parseMutation = useMutation({
+  const parseTextMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/candidates/parse-cv", { cvText }),
     onSuccess: (data: any) => setParsed(data),
     onError: () => toast({ title: "Parse failed", description: "Could not extract candidate data.", variant: "destructive" }),
+  });
+
+  const parseFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedFile) throw new Error("No file selected");
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const res = await fetch("/api/candidates/parse-cv-file", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => setParsed(data),
+    onError: (e: any) => toast({ title: "Parse failed", description: e.message || "Could not extract candidate data.", variant: "destructive" }),
   });
 
   const saveMutation = useMutation({
@@ -36,36 +59,120 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
       headline: parsed.headline || "",
       summary: parsed.summary || "",
       linkedinUrl: parsed.linkedinUrl || "",
+      email: parsed.email || "",
+      phone: parsed.phone || "",
     }),
-    onSuccess: () => {
+    onSuccess: (savedCandidate: any) => {
+      if (parsed.skills || parsed.experience || parsed.education) {
+        apiRequest("PATCH", `/api/candidates/${savedCandidate.id}`, {
+          skills: parsed.skills || [],
+          experience: parsed.experience || [],
+          education: parsed.education || [],
+        }).catch(() => {});
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
       toast({ title: "Candidate saved", description: `${parsed.name} added to talent pool.` });
       setParsed(null);
       setCvText("");
+      setSelectedFile(null);
       onCandidateCreated();
     },
     onError: () => toast({ title: "Error", description: "Could not save candidate.", variant: "destructive" }),
   });
 
+  const isParsing = parseTextMutation.isPending || parseFileMutation.isPending;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+    setParsed(null);
+  };
+
+  const handleParse = () => {
+    if (mode === "file" && selectedFile) parseFileMutation.mutate();
+    else if (mode === "paste" && cvText.trim()) parseTextMutation.mutate();
+  };
+
+  const canParse = (mode === "file" && !!selectedFile) || (mode === "paste" && !!cvText.trim());
+
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Paste CV / Resume Text</label>
-        <Textarea
-          className="h-48 bg-background/50 border-white/10 resize-none font-mono text-xs"
-          placeholder="Paste the full CV text here — name, experience, skills, education, contact details…"
-          value={cvText}
-          onChange={e => setCvText(e.target.value)}
-          data-testid="input-cv-text"
-        />
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant={mode === "file" ? "default" : "outline"}
+          className={mode === "file" ? "ai-button-gradient" : "border-white/10"}
+          onClick={() => { setMode("file"); setParsed(null); }}
+          data-testid="btn-mode-file"
+        >
+          <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload File
+        </Button>
+        <Button
+          size="sm"
+          variant={mode === "paste" ? "default" : "outline"}
+          className={mode === "paste" ? "ai-button-gradient" : "border-white/10"}
+          onClick={() => { setMode("paste"); setParsed(null); }}
+          data-testid="btn-mode-paste"
+        >
+          <FileText className="w-3.5 h-3.5 mr-1.5" /> Paste Text
+        </Button>
       </div>
+
+      {mode === "file" ? (
+        <div className="space-y-3">
+          <div
+            className="border-2 border-dashed border-white/10 rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="dropzone-cv"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={handleFileChange}
+              data-testid="input-cv-file"
+            />
+            {selectedFile ? (
+              <div className="flex items-center justify-center gap-3">
+                <File className="w-8 h-8 text-primary" />
+                <div className="text-left">
+                  <p className="font-medium text-sm">{selectedFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setParsed(null); }} className="ml-auto text-muted-foreground hover:text-destructive">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div>
+                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                <p className="text-sm font-medium">Drop CV here or click to browse</p>
+                <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, or TXT • Max 10 MB</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Paste CV / Resume Text</label>
+          <Textarea
+            className="h-40 bg-background/50 border-white/10 resize-none font-mono text-xs"
+            placeholder="Paste the full CV text here — name, experience, skills, education, contact details…"
+            value={cvText}
+            onChange={e => setCvText(e.target.value)}
+            data-testid="input-cv-text"
+          />
+        </div>
+      )}
+
       <Button
         className="ai-button-gradient w-full"
-        disabled={!cvText.trim() || parseMutation.isPending}
-        onClick={() => parseMutation.mutate()}
+        disabled={!canParse || isParsing}
+        onClick={handleParse}
         data-testid="btn-parse-cv"
       >
-        {parseMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Parsing CV…</> : <><BrainCircuit className="w-4 h-4 mr-2" />Parse with AI</>}
+        {isParsing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Parsing CV…</> : <><BrainCircuit className="w-4 h-4 mr-2" />Parse with AI</>}
       </Button>
 
       {parsed && (
@@ -76,6 +183,8 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><p className="text-xs text-muted-foreground">Name</p><p className="font-medium">{parsed.name || "—"}</p></div>
             <div><p className="text-xs text-muted-foreground">Headline</p><p className="font-medium truncate">{parsed.headline || "—"}</p></div>
+            {parsed.email && <div><p className="text-xs text-muted-foreground">Email</p><p className="font-medium truncate text-xs">{parsed.email}</p></div>}
+            {parsed.phone && <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium text-xs">{parsed.phone}</p></div>}
           </div>
           {parsed.summary && <div><p className="text-xs text-muted-foreground mb-1">Summary</p><p className="text-sm text-muted-foreground line-clamp-3">{parsed.summary}</p></div>}
           {parsed.skills?.length > 0 && (
@@ -117,11 +226,11 @@ export default function CandidatesPage() {
 
   const createCandidate = useCreateCandidate();
   const [isOpen, setIsOpen] = useState(false);
-  const [dialogTab, setDialogTab] = useState("manual");
+  const [dialogTab, setDialogTab] = useState("cv");
 
   const form = useForm<InsertCandidate>({
     resolver: zodResolver(insertCandidateSchema),
-    defaultValues: { name: "", linkedinUrl: "", headline: "", summary: "" }
+    defaultValues: { name: "", linkedinUrl: "", headline: "", summary: "", email: "", phone: "" }
   });
 
   const onSubmit = (data: InsertCandidate) => {
@@ -145,30 +254,50 @@ export default function CandidatesPage() {
               <Plus className="w-4 h-4 mr-2" /> Add Candidate
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[520px] glass-panel border-white/10">
+          <DialogContent className="sm:max-w-[540px] glass-panel border-white/10">
             <DialogHeader>
               <DialogTitle className="font-display text-xl">Add Candidate to Talent Pool</DialogTitle>
             </DialogHeader>
             <Tabs value={dialogTab} onValueChange={setDialogTab} className="mt-2">
               <TabsList className="w-full bg-background/50">
+                <TabsTrigger value="cv" className="flex-1" data-testid="tab-cv-parse">
+                  <Upload className="w-3.5 h-3.5 mr-1.5" /> Parse CV
+                </TabsTrigger>
                 <TabsTrigger value="manual" className="flex-1" data-testid="tab-manual">
                   <Plus className="w-3.5 h-3.5 mr-1.5" /> Manual Entry
                 </TabsTrigger>
-                <TabsTrigger value="cv" className="flex-1" data-testid="tab-cv-parse">
-                  <FileText className="w-3.5 h-3.5 mr-1.5" /> Parse CV
-                </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="cv" className="mt-4">
+                <CvParserTab onCandidateCreated={() => setIsOpen(false)} />
+              </TabsContent>
 
               <TabsContent value="manual" className="mt-4">
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Full Name</FormLabel>
-                        <FormControl><Input placeholder="Jane Doe" {...field} className="bg-background" data-testid="input-name" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Full Name *</FormLabel>
+                          <FormControl><Input placeholder="Jane Doe" {...field} className="bg-background" data-testid="input-name" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="email" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl><Input placeholder="jane@example.com" {...field} className="bg-background" value={field.value || ""} data-testid="input-email" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="phone" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl><Input placeholder="+44 7700 000000" {...field} className="bg-background" value={field.value || ""} data-testid="input-phone" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
                     <FormField control={form.control} name="linkedinUrl" render={({ field }) => (
                       <FormItem>
                         <FormLabel>LinkedIn URL</FormLabel>
@@ -195,10 +324,6 @@ export default function CandidatesPage() {
                     </Button>
                   </form>
                 </Form>
-              </TabsContent>
-
-              <TabsContent value="cv" className="mt-4">
-                <CvParserTab onCandidateCreated={() => setIsOpen(false)} />
               </TabsContent>
             </Tabs>
           </DialogContent>
@@ -271,6 +396,9 @@ export default function CandidatesPage() {
                     <p className="text-sm text-muted-foreground truncate">{candidate.headline || "No headline provided"}</p>
                   </div>
                 </div>
+                {candidate.email && (
+                  <p className="text-xs text-muted-foreground mb-2 truncate">{candidate.email}</p>
+                )}
                 {candidate.sourcePlatform && (
                   <Badge variant="secondary" className="text-xs mb-3 capitalize">{candidate.sourcePlatform}</Badge>
                 )}
@@ -294,7 +422,7 @@ export default function CandidatesPage() {
                 {activeSearch ? `No candidates matched "${activeSearch}"` : "No candidates added yet."}
               </p>
               {!activeSearch && (
-                <p className="text-sm text-muted-foreground mt-1">Use "Add Candidate" or "Parse CV" to get started.</p>
+                <p className="text-sm text-muted-foreground mt-1">Use "Add Candidate" or upload a CV to get started.</p>
               )}
             </div>
           )}

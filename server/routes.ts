@@ -5,11 +5,32 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { isAuthenticated } from "./replit_integrations/auth";
 import OpenAI from "openai";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
+
+const upload = multer({ dest: "/tmp/cv-uploads/", limits: { fileSize: 10 * 1024 * 1024 } });
+
+function getTwilioClient() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authToken) return null;
+  const twilio = require("twilio");
+  return twilio(accountSid, authToken);
+}
+
+async function getSendgridMail() {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey) return null;
+  const sgMail = require("@sendgrid/mail");
+  sgMail.setApiKey(apiKey);
+  return sgMail;
+}
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
@@ -36,6 +57,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       throw err;
     }
+  });
+
+  // Job status toggle (open/close)
+  app.patch(api.jobs.updateStatus.path, isAuthenticated, async (req: any, res) => {
+    const job = await storage.getJob(Number(req.params.id), req.user.claims.sub);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    const { status } = req.body;
+    if (!["active", "closed", "on_hold"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+    const updated = await storage.updateJob(job.id, req.user.claims.sub, { status });
+    res.json(updated);
   });
 
   // JD Parsing — Feature #2
@@ -160,7 +193,14 @@ Output MUST be valid JSON.`
     }
   });
 
-  // CV Parsing — Feature #1
+  app.patch(api.candidates.update.path, isAuthenticated, async (req: any, res) => {
+    const candidate = await storage.getCandidate(Number(req.params.id), req.user.claims.sub);
+    if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+    const updated = await storage.updateCandidate(candidate.id, req.user.claims.sub, req.body);
+    res.json(updated);
+  });
+
+  // CV Parsing — from pasted text
   app.post(api.candidates.parseCv.path, isAuthenticated, async (req: any, res) => {
     const { cvText } = req.body;
     if (!cvText) return res.status(400).json({ message: "cvText is required" });
@@ -175,6 +215,8 @@ Output MUST be valid JSON.`
 - "headline": current job title or professional headline (string)
 - "summary": 2-3 sentence professional summary (string)
 - "linkedinUrl": linkedin URL if mentioned (string or null)
+- "email": email address if mentioned (string or null)
+- "phone": phone number if mentioned (string or null)
 - "skills": array of skill strings
 - "experience": array of {company, title, startDate, endDate, description} objects
 - "education": array of {institution, degree, field, year} objects
@@ -189,6 +231,63 @@ Output MUST be valid JSON.`
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: "CV parsing failed" });
+    }
+  });
+
+  // CV Parsing — from uploaded file (PDF or DOCX)
+  app.post(api.candidates.parseCvFile.path, isAuthenticated, upload.single("file"), async (req: any, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    let extractedText = "";
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (ext === ".pdf") {
+        const pdfParse = require("pdf-parse");
+        const dataBuffer = fs.readFileSync(req.file.path);
+        const pdfData = await pdfParse(dataBuffer);
+        extractedText = pdfData.text;
+      } else if (ext === ".docx" || ext === ".doc") {
+        const mammoth = require("mammoth");
+        const result = await mammoth.extractRawText({ path: req.file.path });
+        extractedText = result.value;
+      } else if (ext === ".txt") {
+        extractedText = fs.readFileSync(req.file.path, "utf-8");
+      } else {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Unsupported file type. Please upload PDF, DOCX, or TXT." });
+      }
+      fs.unlinkSync(req.file.path);
+
+      if (!extractedText.trim()) {
+        return res.status(400).json({ message: "Could not extract text from file." });
+      }
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert recruiter parsing a candidate's CV/resume. Extract all available information and return a JSON object with:
+- "name": full name (string)
+- "headline": current job title or professional headline (string)
+- "summary": 2-3 sentence professional summary (string)
+- "linkedinUrl": linkedin URL if mentioned (string or null)
+- "email": email address if mentioned (string or null)
+- "phone": phone number if mentioned (string or null)
+- "skills": array of skill strings
+- "experience": array of {company, title, startDate, endDate, description} objects
+- "education": array of {institution, degree, field, year} objects
+Output MUST be valid JSON.`
+          },
+          { role: "user", content: extractedText.slice(0, 8000) }
+        ],
+        response_format: { type: "json_object" },
+      });
+      const parsed = JSON.parse(response.choices[0].message.content || "{}");
+      res.json(parsed);
+    } catch (e: any) {
+      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      console.error("CV file parse error:", e);
+      res.status(500).json({ message: "CV parsing failed: " + (e.message || "unknown error") });
     }
   });
 
@@ -509,6 +608,116 @@ Output MUST be valid JSON only.`
     const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
     res.json(await storage.updateSourcedLead(lead.id, req.user.claims.sub, { status: "dismissed" }));
+  });
+
+  // ── Communications (Email / SMS / VoIP) ──────────────────────────────────────
+
+  app.get(api.communications.config.path, isAuthenticated, async (_req, res) => {
+    res.json({
+      twilioConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
+      sendgridConfigured: !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
+    });
+  });
+
+  app.get(api.communications.list.path, isAuthenticated, async (req: any, res) => {
+    const { candidateId } = req.query;
+    const comms = await storage.getCommunications(
+      req.user.claims.sub,
+      candidateId ? Number(candidateId) : undefined
+    );
+    res.json(comms);
+  });
+
+  app.post(api.communications.sendEmail.path, isAuthenticated, async (req: any, res) => {
+    const { candidateId, to, subject, body } = req.body;
+    if (!candidateId || !to || !subject || !body) {
+      return res.status(400).json({ message: "candidateId, to, subject, and body are required" });
+    }
+    const sgMail = await getSendgridMail();
+    if (!sgMail) {
+      return res.status(400).json({ message: "SendGrid not configured. Please add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL to your environment secrets." });
+    }
+    try {
+      await sgMail.send({
+        to,
+        from: process.env.SENDGRID_FROM_EMAIL!,
+        subject,
+        text: body,
+        html: body.replace(/\n/g, "<br>"),
+      });
+      const comm = await storage.createCommunication(req.user.claims.sub, {
+        candidateId: Number(candidateId),
+        type: "email",
+        direction: "outbound",
+        subject,
+        body,
+        status: "sent",
+      });
+      res.json(comm);
+    } catch (e: any) {
+      console.error("SendGrid error:", e);
+      res.status(500).json({ message: "Failed to send email: " + (e.message || "unknown error") });
+    }
+  });
+
+  app.post(api.communications.sendSms.path, isAuthenticated, async (req: any, res) => {
+    const { candidateId, to, body } = req.body;
+    if (!candidateId || !to || !body) {
+      return res.status(400).json({ message: "candidateId, to, and body are required" });
+    }
+    const client = getTwilioClient();
+    if (!client) {
+      return res.status(400).json({ message: "Twilio not configured. Please add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to your environment secrets." });
+    }
+    try {
+      const message = await client.messages.create({
+        body,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to,
+      });
+      const comm = await storage.createCommunication(req.user.claims.sub, {
+        candidateId: Number(candidateId),
+        type: "sms",
+        direction: "outbound",
+        body,
+        status: "sent",
+        externalId: message.sid,
+      } as any);
+      res.json(comm);
+    } catch (e: any) {
+      console.error("Twilio SMS error:", e);
+      res.status(500).json({ message: "Failed to send SMS: " + (e.message || "unknown error") });
+    }
+  });
+
+  app.post(api.communications.initiateCall.path, isAuthenticated, async (req: any, res) => {
+    const { candidateId, to } = req.body;
+    if (!candidateId || !to) {
+      return res.status(400).json({ message: "candidateId and to are required" });
+    }
+    const client = getTwilioClient();
+    if (!client) {
+      return res.status(400).json({ message: "Twilio not configured. Please add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to your environment secrets." });
+    }
+    try {
+      const call = await client.calls.create({
+        url: "http://demo.twilio.com/docs/voice.xml",
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to,
+      });
+      const comm = await storage.createCommunication(req.user.claims.sub, {
+        candidateId: Number(candidateId),
+        type: "call",
+        direction: "outbound",
+        body: `Call initiated to ${to}`,
+        status: "sent",
+        externalId: call.sid,
+      } as any);
+      res.json({ ...comm, callSid: call.sid, status: call.status });
+    } catch (e: any) {
+      console.error("Twilio call error:", e);
+      res.status(500).json({ message: "Failed to initiate call: " + (e.message || "unknown error") });
+    }
   });
 
   return httpServer;

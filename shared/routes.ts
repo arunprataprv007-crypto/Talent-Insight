@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertJobSchema, insertCandidateSchema, insertMatchSchema, insertSourcedLeadSchema } from './schema';
+import { insertJobSchema, insertCandidateSchema, insertMatchSchema, insertSourcedLeadSchema, insertCommunicationSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({ message: z.string(), field: z.string().optional() }),
@@ -15,12 +15,15 @@ export const api = {
     create: { method: 'POST' as const, path: '/api/jobs' as const, input: insertJobSchema, responses: { 201: z.any(), 400: errorSchemas.validation } },
     parse: { method: 'POST' as const, path: '/api/jobs/:id/parse' as const, responses: { 200: z.any(), 404: errorSchemas.notFound } },
     rankCandidates: { method: 'POST' as const, path: '/api/jobs/:id/rank-candidates' as const, responses: { 200: z.any() } },
+    updateStatus: { method: 'PATCH' as const, path: '/api/jobs/:id/status' as const, input: z.object({ status: z.string() }), responses: { 200: z.any() } },
   },
   candidates: {
     list: { method: 'GET' as const, path: '/api/candidates' as const, input: z.object({ search: z.string().optional() }).optional(), responses: { 200: z.array(z.any()) } },
     get: { method: 'GET' as const, path: '/api/candidates/:id' as const, responses: { 200: z.any(), 404: errorSchemas.notFound } },
     create: { method: 'POST' as const, path: '/api/candidates' as const, input: insertCandidateSchema, responses: { 201: z.any(), 400: errorSchemas.validation } },
+    update: { method: 'PATCH' as const, path: '/api/candidates/:id' as const, responses: { 200: z.any() } },
     parseCv: { method: 'POST' as const, path: '/api/candidates/parse-cv' as const, responses: { 200: z.any() } },
+    parseCvFile: { method: 'POST' as const, path: '/api/candidates/parse-cv-file' as const, responses: { 200: z.any() } },
   },
   matches: {
     list: { method: 'GET' as const, path: '/api/matches' as const, input: z.object({ jobId: z.coerce.number().optional(), candidateId: z.coerce.number().optional() }).optional(), responses: { 200: z.array(z.any()) } },
@@ -46,6 +49,13 @@ export const api = {
   },
   boolean: {
     generate: { method: 'POST' as const, path: '/api/boolean/generate' as const, responses: { 200: z.any() } },
+  },
+  communications: {
+    list: { method: 'GET' as const, path: '/api/communications' as const, responses: { 200: z.array(z.any()) } },
+    sendEmail: { method: 'POST' as const, path: '/api/communications/email' as const, responses: { 200: z.any() } },
+    sendSms: { method: 'POST' as const, path: '/api/communications/sms' as const, responses: { 200: z.any() } },
+    initiateCall: { method: 'POST' as const, path: '/api/communications/call' as const, responses: { 200: z.any() } },
+    config: { method: 'GET' as const, path: '/api/communications/config' as const, responses: { 200: z.any() } },
   },
 };
 

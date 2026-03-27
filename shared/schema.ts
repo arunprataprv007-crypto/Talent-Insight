@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, varchar, timestamp, integer, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -24,6 +24,8 @@ export const candidates = pgTable("candidates", {
   userId: varchar("user_id").notNull().references(() => users.id),
   linkedinUrl: text("linkedin_url"),
   name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
   headline: text("headline"),
   summary: text("summary"),
   skills: jsonb("skills"),
@@ -31,6 +33,7 @@ export const candidates = pgTable("candidates", {
   education: jsonb("education"),
   sourcePlatform: text("source_platform"),
   sourceProfileUrl: text("source_profile_url"),
+  pipelineStage: text("pipeline_stage").default("new").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -62,17 +65,37 @@ export const sourcedLeads = pgTable("sourced_leads", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const communications = pgTable("communications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  candidateId: integer("candidate_id").notNull().references(() => candidates.id, { onDelete: 'cascade' }),
+  type: text("type").notNull(), // 'email' | 'sms' | 'call' | 'outlook'
+  direction: text("direction").default("outbound").notNull(), // 'outbound' | 'inbound'
+  subject: text("subject"),
+  body: text("body"),
+  status: text("status").default("sent").notNull(), // 'sent' | 'delivered' | 'failed' | 'received'
+  externalId: text("external_id"), // Twilio SID / SendGrid message ID
+  duration: integer("duration"), // call duration in seconds
+  outlookMessageId: text("outlook_message_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const jobsRelations = relations(jobs, ({ many }) => ({
   matches: many(matches),
 }));
 
 export const candidatesRelations = relations(candidates, ({ many }) => ({
   matches: many(matches),
+  communications: many(communications),
 }));
 
 export const matchesRelations = relations(matches, ({ one }) => ({
   job: one(jobs, { fields: [matches.jobId], references: [jobs.id] }),
   candidate: one(candidates, { fields: [matches.candidateId], references: [candidates.id] }),
+}));
+
+export const communicationsRelations = relations(communications, ({ one }) => ({
+  candidate: one(candidates, { fields: [communications.candidateId], references: [candidates.id] }),
 }));
 
 export const insertJobSchema = createInsertSchema(jobs).omit({
@@ -88,6 +111,9 @@ export const insertMatchSchema = createInsertSchema(matches).omit({
 export const insertSourcedLeadSchema = createInsertSchema(sourcedLeads).omit({
   id: true, userId: true, status: true, importedCandidateId: true, createdAt: true
 });
+export const insertCommunicationSchema = createInsertSchema(communications).omit({
+  id: true, userId: true, createdAt: true, externalId: true, duration: true, outlookMessageId: true
+});
 
 export type Job = typeof jobs.$inferSelect;
 export type InsertJob = z.infer<typeof insertJobSchema>;
@@ -97,3 +123,5 @@ export type Match = typeof matches.$inferSelect;
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type SourcedLead = typeof sourcedLeads.$inferSelect;
 export type InsertSourcedLead = z.infer<typeof insertSourcedLeadSchema>;
+export type Communication = typeof communications.$inferSelect;
+export type InsertCommunication = z.infer<typeof insertCommunicationSchema>;
