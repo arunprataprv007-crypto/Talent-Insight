@@ -44,6 +44,9 @@ export const api = {
   screening: {
     stats: { method: 'GET' as const, path: '/api/screening/stats' as const, responses: { 200: z.any() } },
   },
+  boolean: {
+    generate: { method: 'POST' as const, path: '/api/boolean/generate' as const, responses: { 200: z.any() } },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

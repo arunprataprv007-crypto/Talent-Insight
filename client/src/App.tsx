@@ -17,6 +17,7 @@ import MatchesPage from "@/pages/matches";
 import MatchDetailPage from "@/pages/match-detail";
 import SourcingPage from "@/pages/sourcing";
 import ScreeningDashboard from "@/pages/screening";
+import BooleanGeneratorPage from "@/pages/boolean-generator";
 import { Layout } from "@/components/layout";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetailPage} />} />
       <Route path="/sourcing" component={() => <ProtectedRoute component={SourcingPage} />} />
       <Route path="/screening" component={() => <ProtectedRoute component={ScreeningDashboard} />} />
+      <Route path="/boolean" component={() => <ProtectedRoute component={BooleanGeneratorPage} />} />
       <Route component={NotFound} />
     </Switch>
   );

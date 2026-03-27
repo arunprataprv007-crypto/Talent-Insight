@@ -439,6 +439,72 @@ Generate 10-12 questions total, covering all categories.`
     res.json({ candidate, lead });
   });
 
+  // ── Boolean Generator — AI extraction from raw JD ────────────────────────────
+  app.post(api.boolean.generate.path, isAuthenticated, async (req: any, res) => {
+    const { jdText, jobTitles, requiredSkills, optionalSkills, excludedTerms } = req.body;
+    try {
+      let extractedTerms: any = { jobTitles: jobTitles || [], requiredSkills: requiredSkills || [], optionalSkills: optionalSkills || [], excludedTerms: excludedTerms || [] };
+
+      if (jdText && jdText.trim()) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-5.2",
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert technical recruiter specializing in Boolean search strings. 
+Extract structured search terms from the job description and return JSON with:
+- "jobTitles": array of relevant job title variations (include plurals, abbreviations, e.g. "Software Engineer", "SWE", "Developer")
+- "requiredSkills": array of must-have technical skills, tools, languages
+- "optionalSkills": array of nice-to-have skills, certifications, frameworks
+- "excludedTerms": array of terms to exclude (e.g. "intern", "junior" if senior role, "manager" if IC role)
+- "seniority": string (e.g. "Senior", "Lead", "Junior") or null
+- "industry": string (e.g. "fintech", "SaaS") or null
+Output MUST be valid JSON only.`
+            },
+            { role: "user", content: jdText }
+          ],
+          response_format: { type: "json_object" },
+        });
+        const aiResult = JSON.parse(response.choices[0].message.content || "{}");
+        extractedTerms = {
+          jobTitles: [...(jobTitles || []), ...(aiResult.jobTitles || [])].filter((v, i, a) => a.indexOf(v) === i),
+          requiredSkills: [...(requiredSkills || []), ...(aiResult.requiredSkills || [])].filter((v, i, a) => a.indexOf(v) === i),
+          optionalSkills: [...(optionalSkills || []), ...(aiResult.optionalSkills || [])].filter((v, i, a) => a.indexOf(v) === i),
+          excludedTerms: [...(excludedTerms || []), ...(aiResult.excludedTerms || [])].filter((v, i, a) => a.indexOf(v) === i),
+          seniority: aiResult.seniority || null,
+          industry: aiResult.industry || null,
+        };
+      }
+
+      const { jobTitles: jt, requiredSkills: rs, optionalSkills: os, excludedTerms: et } = extractedTerms;
+
+      const titlePart = jt.length ? `(${jt.map((t: string) => `"${t}"`).join(" OR ")})` : "";
+      const reqPart = rs.length ? rs.map((s: string) => `"${s}"`).join(" AND ") : "";
+      const optPart = os.length ? `(${os.map((s: string) => `"${s}"`).join(" OR ")})` : "";
+      const exPart = et.length ? et.map((e: string) => `NOT "${e}"`).join(" ") : "";
+
+      const buildLinkedIn = () => [titlePart, reqPart, optPart, exPart].filter(Boolean).join(" AND ");
+      const buildXRayLinkedIn = () => `site:linkedin.com/in ${[titlePart, reqPart].filter(Boolean).join(" ")}`.trim();
+      const buildXRayGitHub = () => `site:github.com ${[rs.slice(0, 5).map((s: string) => `"${s}"`).join(" "), titlePart].filter(Boolean).join(" ")}`.trim();
+      const buildIndeed = () => [titlePart, rs.map((s: string) => `"${s}"`).join(" "), optPart, exPart].filter(Boolean).join(" ");
+      const buildStackOverflow = () => `site:stackoverflow.com/users ${[rs.slice(0, 4).map((s: string) => `"${s}"`).join(" OR ")].filter(Boolean).join("")}`;
+
+      res.json({
+        terms: extractedTerms,
+        strings: {
+          linkedin: buildLinkedIn(),
+          xrayLinkedIn: buildXRayLinkedIn(),
+          xrayGitHub: buildXRayGitHub(),
+          indeed: buildIndeed(),
+          stackOverflow: buildStackOverflow(),
+        },
+      });
+    } catch (e: any) {
+      console.error("Boolean generate error:", e);
+      res.status(500).json({ message: e.message || "Generation failed" });
+    }
+  });
+
   app.patch(api.sourcing.leads.dismiss.path, isAuthenticated, async (req: any, res) => {
     const lead = await storage.getSourcedLead(Number(req.params.id), req.user.claims.sub);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
