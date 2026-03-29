@@ -14,7 +14,8 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-const upload = multer({ dest: "/tmp/cv-uploads/", limits: { fileSize: 10 * 1024 * 1024 } });
+// Use memory storage to avoid directory issues in any environment
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 function getTwilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -240,25 +241,24 @@ Output MUST be valid JSON.`
     let extractedText = "";
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer: Buffer = req.file.buffer;
+
       if (ext === ".pdf") {
         const pdfParse = require("pdf-parse");
-        const dataBuffer = fs.readFileSync(req.file.path);
-        const pdfData = await pdfParse(dataBuffer);
+        const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text;
       } else if (ext === ".docx" || ext === ".doc") {
         const mammoth = require("mammoth");
-        const result = await mammoth.extractRawText({ path: req.file.path });
+        const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value;
       } else if (ext === ".txt") {
-        extractedText = fs.readFileSync(req.file.path, "utf-8");
+        extractedText = buffer.toString("utf-8");
       } else {
-        fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: "Unsupported file type. Please upload PDF, DOCX, or TXT." });
       }
-      fs.unlinkSync(req.file.path);
 
       if (!extractedText.trim()) {
-        return res.status(400).json({ message: "Could not extract text from file." });
+        return res.status(400).json({ message: "Could not extract text from file. The file may be scanned/image-only." });
       }
 
       const response = await openai.chat.completions.create({
@@ -285,7 +285,6 @@ Output MUST be valid JSON.`
       const parsed = JSON.parse(response.choices[0].message.content || "{}");
       res.json(parsed);
     } catch (e: any) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       console.error("CV file parse error:", e);
       res.status(500).json({ message: "CV parsing failed: " + (e.message || "unknown error") });
     }

@@ -23,14 +23,15 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
   const [cvText, setCvText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const parseTextMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/candidates/parse-cv", { cvText }),
+    mutationFn: () => apiRequest("POST", "/api/candidates/parse-cv", { cvText }).then(r => r.json()),
     onSuccess: (data: any) => setParsed(data),
-    onError: () => toast({ title: "Parse failed", description: "Could not extract candidate data.", variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Parse failed", description: e?.message || "Could not extract candidate data.", variant: "destructive" }),
   });
 
   const parseFileMutation = useMutation({
@@ -61,7 +62,7 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
       linkedinUrl: parsed.linkedinUrl || "",
       email: parsed.email || "",
       phone: parsed.phone || "",
-    }),
+    }).then(r => r.json()),
     onSuccess: (savedCandidate: any) => {
       if (parsed.skills || parsed.experience || parsed.education) {
         apiRequest("PATCH", `/api/candidates/${savedCandidate.id}`, {
@@ -86,6 +87,33 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
     const file = e.target.files?.[0] || null;
     setSelectedFile(file);
     setParsed(null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0] || null;
+    if (!file) return;
+    const allowed = [".pdf", ".doc", ".docx", ".txt"];
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowed.includes(ext)) {
+      toast({ title: "Unsupported file", description: "Please drop a PDF, DOCX, or TXT file.", variant: "destructive" });
+      return;
+    }
+    setSelectedFile(file);
+    setParsed(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
   };
 
   const handleParse = () => {
@@ -121,8 +149,14 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
       {mode === "file" ? (
         <div className="space-y-3">
           <div
-            className="border-2 border-dashed border-white/10 rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 transition-colors"
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+              isDragging ? "border-primary bg-primary/10 scale-[1.01]" : "border-white/10 hover:border-primary/40"
+            }`}
             onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDragEnter={handleDragOver}
             data-testid="dropzone-cv"
           >
             <input
@@ -146,8 +180,8 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
               </div>
             ) : (
               <div>
-                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                <p className="text-sm font-medium">Drop CV here or click to browse</p>
+                <Upload className={`w-8 h-8 mx-auto mb-2 transition-colors ${isDragging ? "text-primary" : "text-muted-foreground/50"}`} />
+                <p className="text-sm font-medium">{isDragging ? "Drop to upload" : "Drag & drop CV here, or click to browse"}</p>
                 <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, or TXT • Max 10 MB</p>
               </div>
             )}

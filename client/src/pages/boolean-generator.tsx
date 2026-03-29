@@ -306,19 +306,27 @@ export default function BooleanGeneratorPage() {
       requiredSkills: terms.requiredSkills,
       optionalSkills: terms.optionalSkills,
       excludedTerms: terms.excludedTerms,
-    }),
+    }).then(r => r.json()),
     onSuccess: (data: any) => {
-      setTerms({
+      const newTerms = {
         jobTitles: data.terms?.jobTitles || [],
         requiredSkills: data.terms?.requiredSkills || [],
         optionalSkills: data.terms?.optionalSkills || [],
         excludedTerms: data.terms?.excludedTerms || [],
-      });
-      setGeneratedStrings(data.strings);
+      };
+      setTerms(newTerms);
+      setGeneratedStrings(data.strings || null);
       setExtractedMeta({ seniority: data.terms?.seniority, industry: data.terms?.industry });
-      toast({ title: "AI extraction complete", description: `Extracted ${(data.terms?.jobTitles?.length || 0) + (data.terms?.requiredSkills?.length || 0)} terms from JD.` });
+      const totalExtracted = (data.terms?.jobTitles?.length || 0) + (data.terms?.requiredSkills?.length || 0) + (data.terms?.optionalSkills?.length || 0);
+      toast({
+        title: "AI extraction complete",
+        description: `Extracted ${totalExtracted} terms — boolean strings generated for 5 platforms.`,
+      });
     },
-    onError: () => toast({ title: "AI extraction failed", variant: "destructive" }),
+    onError: (e: any) => {
+      const msg = e?.message || "AI extraction failed. Check the job description and try again.";
+      toast({ title: "Extraction failed", description: msg, variant: "destructive" });
+    },
   });
 
   const addTerm = useCallback((bucket: keyof TermBucket, term: string) => {
