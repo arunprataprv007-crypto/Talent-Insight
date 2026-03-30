@@ -35,10 +35,9 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
   });
 
   const parseFileMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedFile) throw new Error("No file selected");
+    mutationFn: async (file: File) => {
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      formData.append("file", file);
       const res = await fetch("/api/candidates/parse-cv-file", {
         method: "POST",
         body: formData,
@@ -83,10 +82,15 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
 
   const isParsing = parseTextMutation.isPending || parseFileMutation.isPending;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
+  const triggerFileParse = (file: File) => {
     setSelectedFile(file);
     setParsed(null);
+    parseFileMutation.mutate(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) triggerFileParse(file);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -101,8 +105,7 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
       toast({ title: "Unsupported file", description: "Please drop a PDF, DOCX, or TXT file.", variant: "destructive" });
       return;
     }
-    setSelectedFile(file);
-    setParsed(null);
+    triggerFileParse(file);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -117,7 +120,7 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
   };
 
   const handleParse = () => {
-    if (mode === "file" && selectedFile) parseFileMutation.mutate();
+    if (mode === "file" && selectedFile) parseFileMutation.mutate(selectedFile);
     else if (mode === "paste" && cvText.trim()) parseTextMutation.mutate();
   };
 
@@ -169,14 +172,16 @@ function CvParserTab({ onCandidateCreated }: { onCandidateCreated: () => void })
             />
             {selectedFile ? (
               <div className="flex items-center justify-center gap-3">
-                <File className="w-8 h-8 text-primary" />
+                {isParsing ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <File className="w-8 h-8 text-primary" />}
                 <div className="text-left">
                   <p className="font-medium text-sm">{selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</p>
+                  <p className="text-xs text-muted-foreground">{isParsing ? "Parsing with AI…" : `${(selectedFile.size / 1024).toFixed(0)} KB`}</p>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setParsed(null); }} className="ml-auto text-muted-foreground hover:text-destructive">
-                  <X className="w-4 h-4" />
-                </button>
+                {!isParsing && (
+                  <button onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setParsed(null); }} className="ml-auto text-muted-foreground hover:text-destructive">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ) : (
               <div>

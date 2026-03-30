@@ -78,7 +78,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!job) return res.status(404).json({ message: "Job not found" });
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -121,7 +121,7 @@ Output MUST be valid JSON.`
     if (!allCandidates.length) return res.json({ rankings: [] });
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -155,7 +155,7 @@ Output MUST be valid JSON.`
     if (search && candidateList.length > 0) {
       try {
         const response = await openai.chat.completions.create({
-          model: "gpt-5.2",
+          model: "gpt-4o",
           messages: [
             { role: "system", content: "You are an AI search assistant. Given a search query and a list of candidates, return only the IDs of candidates that match the query semantically. Return a JSON object with a single key 'matchedIds' containing an array of numbers. Candidates: " + JSON.stringify(candidateList.map(c => ({ id: c.id, name: c.name, headline: c.headline, summary: c.summary }))) },
             { role: "user", content: `Search Query: ${search}` }
@@ -207,7 +207,7 @@ Output MUST be valid JSON.`
     if (!cvText) return res.status(400).json({ message: "cvText is required" });
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -262,7 +262,7 @@ Output MUST be valid JSON.`
       }
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -325,7 +325,7 @@ Output MUST be valid JSON.`
     if (!match) return res.status(404).json({ message: "Match not found" });
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -361,7 +361,7 @@ Output MUST be valid JSON.`
     if (!match) return res.status(404).json({ message: "Match not found" });
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -545,7 +545,7 @@ Generate 10-12 questions total, covering all categories.`
 
       if (jdText && jdText.trim()) {
         const response = await openai.chat.completions.create({
-          model: "gpt-5.2",
+          model: "gpt-4o",
           messages: [
             {
               role: "system",
