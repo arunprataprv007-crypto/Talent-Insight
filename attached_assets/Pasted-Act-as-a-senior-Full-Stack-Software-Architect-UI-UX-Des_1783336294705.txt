@@ -1,0 +1,726 @@
+Act as a senior Full Stack Software Architect, UI/UX Designer, Product Manager, AI Engineer, and LegalTech SaaS expert.
+
+Your task is to design and build a production-ready, enterprise-grade Full Stack Legal AI Platform for India.
+
+Project Name:
+NyayaAI (Working Title)
+
+Tagline:
+"India's AI-Powered Legal Intelligence Platform"
+
+The application should be modern, scalable, secure, responsive, and AI-first.
+
+======================================================
+OBJECTIVE
+======================================================
+
+Build a complete LegalTech platform that enables Indian citizens, advocates, law firms, businesses, and students to:
+
+• View live legal statistics
+• Search court cases
+• Understand Indian laws under BNS, BNSS, and BSA
+• Track case status
+• Upload legal documents for AI analysis
+• Generate legal drafts
+• Chat with AI using OpenAI GPT and Anthropic Claude
+• Book consultations with advocates
+• Learn Indian law through AI
+• Access legal news and judgments
+• Manage legal documents securely
+
+The application should be designed as a SaaS platform with role-based access.
+
+======================================================
+TECH STACK
+======================================================
+
+Frontend
+- Next.js (Latest)
+- React
+- TypeScript
+- Tailwind CSS
+- ShadCN UI
+- Framer Motion
+- React Query
+- React Hook Form
+- Zod Validation
+
+Backend
+- NestJS or FastAPI (recommend the most suitable)
+- TypeScript or Python
+- REST API
+- GraphQL support
+- JWT Authentication
+- OAuth
+- Role Based Access Control
+
+Database
+- PostgreSQL
+- Prisma ORM
+- Redis
+- Elasticsearch
+
+Storage
+- AWS S3
+
+Hosting
+- Docker
+- Kubernetes Ready
+- AWS
+- Vercel
+- CI/CD GitHub Actions
+
+Authentication
+- Clerk/Auth.js/Firebase/Auth0
+- Google Login
+- Apple Login
+- Mobile OTP
+- Email Verification
+
+Payments
+- Razorpay
+- Stripe
+
+Notifications
+- Email
+- SMS
+- WhatsApp
+- Push Notifications
+
+======================================================
+AI INTEGRATION
+======================================================
+
+Integrate:
+
+1. OpenAI GPT API
+2. Anthropic Claude API
+
+Create an AI Router.
+
+The router automatically selects the best model.
+
+Examples:
+
+Simple legal questions
+→ GPT
+
+Legal drafting
+→ GPT
+
+Long Judgments
+→ Claude
+
+Large PDF Analysis
+→ Claude
+
+Document Review
+→ Claude
+
+Contract Drafting
+→ GPT
+
+Provide model fallbacks and configurable API keys.
+
+======================================================
+USER ROLES
+======================================================
+
+Citizen
+
+Advocate
+
+Law Firm
+
+Corporate
+
+Student
+
+Administrator
+
+Super Admin
+
+======================================================
+MODULE 1
+LIVE LEGAL DASHBOARD
+======================================================
+
+Create beautiful dashboards showing:
+
+Total Pending Cases
+
+Supreme Court Cases
+
+High Court Cases
+
+District Court Cases
+
+State-wise Cases
+
+District-wise Cases
+
+Civil Cases
+
+Criminal Cases
+
+Case Disposal Rate
+
+Pending by Year
+
+Pending by Age
+
+Daily Updates
+
+Charts
+
+Maps
+
+Graphs
+
+Search Filters
+
+======================================================
+MODULE 2
+CASE SEARCH
+======================================================
+
+Allow search using:
+
+CNR Number
+
+Case Number
+
+FIR Number
+
+Party Name
+
+Judge Name
+
+Court Name
+
+Advocate
+
+State
+
+District
+
+Display:
+
+Case Status
+
+Next Hearing
+
+Timeline
+
+Orders
+
+Judgments
+
+Cause List
+
+Download PDFs
+
+======================================================
+MODULE 3
+NEW CRIMINAL LAWS
+======================================================
+
+Complete searchable database for:
+
+Bharatiya Nyaya Sanhita (BNS)
+
+Bharatiya Nagarik Suraksha Sanhita (BNSS)
+
+Bharatiya Sakshya Adhiniyam (BSA)
+
+For every section include:
+
+Section Number
+
+Title
+
+Simple Explanation
+
+Detailed Explanation
+
+Ingredients
+
+Punishment
+
+Fine
+
+Bailable
+
+Non-Bailable
+
+Cognizable
+
+Non-Cognizable
+
+Compoundable
+
+Relevant Judgments
+
+Examples
+
+FAQs
+
+Previous IPC Mapping
+
+Related Sections
+
+AI Explanation
+
+======================================================
+MODULE 4
+AI LEGAL CHAT
+======================================================
+
+Modern ChatGPT-like interface.
+
+Support:
+
+GPT
+
+Claude
+
+Conversation History
+
+Memory
+
+Voice Input
+
+Voice Output
+
+Image Upload
+
+PDF Upload
+
+Typing Animation
+
+Streaming Response
+
+Legal Disclaimer
+
+Suggested Questions
+
+======================================================
+MODULE 5
+CASE ANALYZER
+======================================================
+
+Upload:
+
+PDF
+
+FIR
+
+Judgment
+
+Court Orders
+
+Legal Notice
+
+Contracts
+
+Automatically extract:
+
+Parties
+
+Judge
+
+Court
+
+Sections
+
+Dates
+
+Timeline
+
+Risk Analysis
+
+Summary
+
+Suggested Next Steps
+
+Related Laws
+
+Related Judgments
+
+======================================================
+MODULE 6
+LEGAL DRAFT GENERATOR
+======================================================
+
+Generate:
+
+Legal Notice
+
+Police Complaint
+
+Consumer Complaint
+
+RTI
+
+Affidavit
+
+Employment Contract
+
+Rental Agreement
+
+NDA
+
+Partnership Agreement
+
+Sale Agreement
+
+Power of Attorney
+
+Divorce Petition
+
+Bail Application
+
+Will
+
+AI editable output.
+
+Export:
+
+Word
+
+PDF
+
+======================================================
+MODULE 7
+ADVOCATE DIRECTORY
+======================================================
+
+Search lawyers by:
+
+Location
+
+Practice Area
+
+Languages
+
+Experience
+
+Rating
+
+Fees
+
+Book Consultation
+
+Live Availability
+
+Verified Badge
+
+======================================================
+MODULE 8
+VIDEO CONSULTATION
+======================================================
+
+Calendar
+
+Booking
+
+Payments
+
+Google Meet
+
+Zoom
+
+Video Calling
+
+Chat
+
+Appointment History
+
+======================================================
+MODULE 9
+DOCUMENT VAULT
+======================================================
+
+Encrypted storage.
+
+Folders
+
+OCR
+
+Tagging
+
+Search
+
+Version History
+
+Sharing
+
+======================================================
+MODULE 10
+LEGAL NEWS
+======================================================
+
+Daily updates.
+
+Supreme Court
+
+High Courts
+
+Government Notifications
+
+BNS Updates
+
+AI Summaries
+
+======================================================
+MODULE 11
+LEGAL LEARNING
+======================================================
+
+Courses
+
+BNS
+
+BNSS
+
+BSA
+
+Constitution
+
+Judgments
+
+Mock Tests
+
+Certificates
+
+======================================================
+MODULE 12
+ADMIN PANEL
+======================================================
+
+Manage:
+
+Users
+
+Lawyers
+
+Consultations
+
+Payments
+
+Subscriptions
+
+AI Usage
+
+Documents
+
+News
+
+CMS
+
+Analytics
+
+======================================================
+DASHBOARDS
+======================================================
+
+Citizen Dashboard
+
+Advocate Dashboard
+
+Law Firm Dashboard
+
+Admin Dashboard
+
+Analytics Dashboard
+
+======================================================
+AI FEATURES
+======================================================
+
+AI Research
+
+AI Summaries
+
+Judgment Comparison
+
+Case Outcome Prediction (experimental)
+
+Citation Generator
+
+Legal Risk Assessment
+
+Smart Search
+
+Voice Assistant
+
+Multilingual AI
+
+======================================================
+SEARCH
+======================================================
+
+Global Search
+
+AI Semantic Search
+
+Autocomplete
+
+OCR Search
+
+Judgment Search
+
+Section Search
+
+Law Search
+
+======================================================
+LANGUAGES
+======================================================
+
+English
+
+Hindi
+
+Gujarati
+
+Tamil
+
+Telugu
+
+Kannada
+
+Malayalam
+
+Marathi
+
+Punjabi
+
+Bengali
+
+======================================================
+SECURITY
+======================================================
+
+JWT
+
+RBAC
+
+Encryption
+
+Audit Logs
+
+Rate Limiting
+
+DDoS Protection
+
+Cloudflare
+
+GDPR-ready
+
+DPDP Act (India) compliance
+
+OWASP Top 10 protections
+
+======================================================
+UI/UX
+======================================================
+
+Modern minimalist design inspired by:
+
+ChatGPT
+
+Perplexity
+
+Notion
+
+Vercel
+
+Linear
+
+Use:
+
+Dark Mode
+
+Light Mode
+
+Responsive Design
+
+Micro Animations
+
+Beautiful Cards
+
+Charts
+
+Interactive Dashboards
+
+Accessibility (WCAG)
+
+======================================================
+MONETIZATION
+======================================================
+
+Free
+
+Premium
+
+Professional
+
+Enterprise
+
+Subscription Billing
+
+Referral System
+
+Promo Codes
+
+======================================================
+PROJECT STRUCTURE
+======================================================
+
+Generate:
+
+Complete folder structure
+
+Database schema
+
+ER diagrams
+
+API documentation
+
+Swagger
+
+Component architecture
+
+Authentication flow
+
+Deployment guide
+
+Docker configuration
+
+CI/CD pipeline
+
+Unit tests
+
+Integration tests
+
+End-to-end tests
+
+======================================================
+DELIVERABLES
+======================================================
+
+Generate the project in phases:
+
+Phase 1 – Architecture and database design
+Phase 2 – Authentication and user management
+Phase 3 – Legal dashboards and analytics
+Phase 4 – Case search and tracking
+Phase 5 – BNS/BNSS/BSA knowledge base
+Phase 6 – AI legal assistant (GPT + Claude)
+Phase 7 – Document analysis and drafting
+Phase 8 – Advocate marketplace and consultations
+Phase 9 – Admin portal
+Phase 10 – Testing, security hardening, deployment, and production optimization
+
+Follow clean architecture, SOLID principles, reusable components, modular code, scalable APIs, comprehensive documentation, and production-grade coding standards throughout the project.
