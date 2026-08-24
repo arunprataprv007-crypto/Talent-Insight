@@ -8,6 +8,7 @@ import OpenAI from "openai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { getAiProviderStatus, parseCvWithOrchestrator } from "./ai-orchestrator";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -34,6 +35,10 @@ async function getSendgridMail() {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+
+  app.get("/api/ai/status", isAuthenticated, async (_req, res) => {
+    res.json(getAiProviderStatus());
+  });
 
   // ── Jobs ─────────────────────────────────────────────────────────────────────
 
@@ -206,29 +211,8 @@ Output MUST be valid JSON.`
     const { cvText } = req.body;
     if (!cvText) return res.status(400).json({ message: "cvText is required" });
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert recruiter parsing a candidate's CV/resume. Extract all available information and return a JSON object with:
-- "name": full name (string)
-- "headline": current job title or professional headline (string)
-- "summary": 2-3 sentence professional summary (string)
-- "linkedinUrl": linkedin URL if mentioned (string or null)
-- "email": email address if mentioned (string or null)
-- "phone": phone number if mentioned (string or null)
-- "skills": array of skill strings
-- "experience": array of {company, title, startDate, endDate, description} objects
-- "education": array of {institution, degree, field, year} objects
-Output MUST be valid JSON.`
-          },
-          { role: "user", content: cvText }
-        ],
-        response_format: { type: "json_object" },
-      });
-      const parsed = JSON.parse(response.choices[0].message.content || "{}");
-      res.json(parsed);
+      const parsed = await parseCvWithOrchestrator(cvText);
+      res.json({ ...parsed.result, _providers: parsed.providers.map(({ provider, ok }) => ({ provider, ok })) });
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: "CV parsing failed" });
@@ -261,29 +245,8 @@ Output MUST be valid JSON.`
         return res.status(400).json({ message: "Could not extract text from file. The file may be scanned/image-only." });
       }
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert recruiter parsing a candidate's CV/resume. Extract all available information and return a JSON object with:
-- "name": full name (string)
-- "headline": current job title or professional headline (string)
-- "summary": 2-3 sentence professional summary (string)
-- "linkedinUrl": linkedin URL if mentioned (string or null)
-- "email": email address if mentioned (string or null)
-- "phone": phone number if mentioned (string or null)
-- "skills": array of skill strings
-- "experience": array of {company, title, startDate, endDate, description} objects
-- "education": array of {institution, degree, field, year} objects
-Output MUST be valid JSON.`
-          },
-          { role: "user", content: extractedText.slice(0, 8000) }
-        ],
-        response_format: { type: "json_object" },
-      });
-      const parsed = JSON.parse(response.choices[0].message.content || "{}");
-      res.json(parsed);
+      const parsed = await parseCvWithOrchestrator(extractedText);
+      res.json({ ...parsed.result, _providers: parsed.providers.map(({ provider, ok }) => ({ provider, ok })) });
     } catch (e: any) {
       console.error("CV file parse error:", e);
       res.status(500).json({ message: "CV parsing failed: " + (e.message || "unknown error") });

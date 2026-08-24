@@ -2,13 +2,17 @@ import { useJobs } from "@/hooks/use-jobs";
 import { useCandidates } from "@/hooks/use-candidates";
 import { useMatches } from "@/hooks/use-matches";
 import { Card } from "@/components/ui/card";
-import { Briefcase, Users, GitMerge, Zap } from "lucide-react";
+import { Briefcase, Users, GitMerge, Zap, BrainCircuit, CheckCircle2, CircleDashed, ShieldCheck, ArrowDown } from "lucide-react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Dashboard() {
   const { data: jobs } = useJobs();
   const { data: candidates } = useCandidates();
   const { data: matches } = useMatches();
+  const { data: aiStatus } = useQuery<Record<string, boolean>>({
+    queryKey: ["/api/ai/status"],
+  });
 
   const stats = [
     { title: "Active Jobs", value: jobs?.length || 0, icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/10" },
@@ -84,6 +88,64 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      <Card className="p-6 glass-panel border-white/5">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <BrainCircuit className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="font-display font-semibold text-lg">Talent Insight Engine</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2 max-w-xl">
+              Every CV and job description can be routed through multiple models, then returned with a verified fit score and supporting evidence.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            Result verification enabled
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
+          <EngineStep title="JD / CV" detail="Input" icon="document" />
+          <ArrowDown className="w-4 h-4 text-muted-foreground self-center lg:-rotate-90" />
+          <EngineStep title="AI Orchestrator" detail="Routes requests" icon="brain" />
+          <ArrowDown className="w-4 h-4 text-muted-foreground self-center lg:-rotate-90" />
+          <div className="grid grid-cols-3 gap-2 flex-1">
+            {[
+              ["OpenAI", "openai"],
+              ["Gemini", "gemini"],
+              ["Claude", "claude"],
+            ].map(([label, key]) => {
+              const enabled = aiStatus?.[key];
+              return (
+                <div key={key} className="rounded-xl border border-border/60 bg-white/[.03] p-3">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-sm font-medium">{label}</span>
+                    {enabled ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <CircleDashed className="w-4 h-4 text-muted-foreground" />}
+                  </div>
+                  <p className={`text-[11px] mt-1 ${enabled ? "text-emerald-400" : "text-muted-foreground"}`}>
+                    {enabled ? "Connected" : "Not configured"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          <ArrowDown className="w-4 h-4 text-muted-foreground self-center lg:-rotate-90" />
+          <EngineStep title="Verified answer" detail="Fit score + evidence" icon="check" />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function EngineStep({ title, detail, icon }: { title: string; detail: string; icon: string }) {
+  return (
+    <div className="rounded-xl border border-primary/20 bg-primary/[.06] p-3 min-w-[150px]">
+      <p className="text-sm font-semibold">{title}</p>
+      <p className="text-[11px] text-muted-foreground mt-1">{detail}</p>
     </div>
   );
 }
