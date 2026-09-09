@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, CheckCircle2, Circle, ChevronDown, ChevronUp, Search,
   Copy, Users, Briefcase, Scale, Code2, MessageSquare, BarChart3,
-  Wrench, Star, FileText, GraduationCap, ClipboardList, X, PlayCircle
+  Wrench, Star, FileText, GraduationCap, ClipboardList, X, PlayCircle, Download, ExternalLink
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -646,6 +646,40 @@ export default function TrainingPage() {
         <div className="px-5 py-3 text-xs text-muted-foreground">
           GCC Recruitment Academy · MP4 training video
         </div>
+      </Card>
+
+      {/* Academy Manual */}
+      <Card className="overflow-hidden glass-panel border-white/5">
+        <div className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-display font-semibold text-lg">Complete Recruiter Training Manual</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                2026 GCC Recruitment Academy playbook covering the full recruitment lifecycle.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button asChild variant="outline" size="sm" className="border-white/10">
+              <a href="/gcc-recruitment-academy-training-manual.pdf" target="_blank" rel="noreferrer">
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Open
+              </a>
+            </Button>
+            <Button asChild size="sm" className="ai-button-gradient">
+              <a href="/gcc-recruitment-academy-training-manual.pdf" download>
+                <Download className="w-3.5 h-3.5 mr-1.5" /> Download
+              </a>
+            </Button>
+          </div>
+        </div>
+        <iframe
+          src="/gcc-recruitment-academy-training-manual.pdf"
+          title="GCC Recruitment Academy complete training manual"
+          className="w-full h-[620px] border-t border-white/5 bg-white"
+        />
       </Card>
 
       {/* Search */}
