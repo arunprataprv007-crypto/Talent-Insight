@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, CheckCircle2, Circle, ChevronDown, ChevronUp, Search,
   Copy, Users, Briefcase, Scale, Code2, MessageSquare, BarChart3,
-  Wrench, Star, FileText, GraduationCap, ClipboardList, X
+  Wrench, Star, FileText, GraduationCap, ClipboardList, X, PlayCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -616,6 +616,36 @@ export default function TrainingPage() {
             <CheckCircle2 className="w-3.5 h-3.5" /> You've completed the full training manual!
           </p>
         )}
+      </Card>
+
+      {/* Academy Video */}
+      <Card className="overflow-hidden glass-panel border-white/5">
+        <div className="p-5 pb-3 flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+            <PlayCircle className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-display font-semibold text-lg">GCC Recruitment Academy</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Watch the recruitment training video before working through the detailed manual below.
+            </p>
+          </div>
+        </div>
+        <div className="bg-black/30 border-y border-white/5">
+          <video
+            className="w-full aspect-video max-h-[520px] object-contain bg-black"
+            controls
+            preload="metadata"
+            playsInline
+            aria-label="GCC Recruitment Academy training video"
+          >
+            <source src="/gcc-recruitment-academy-training.mp4" type="video/mp4" />
+            Your browser does not support the training video.
+          </video>
+        </div>
+        <div className="px-5 py-3 text-xs text-muted-foreground">
+          GCC Recruitment Academy · MP4 training video
+        </div>
       </Card>
 
       {/* Search */}
