@@ -675,11 +675,9 @@ export default function TrainingPage() {
             </Button>
           </div>
         </div>
-        <iframe
-          src="/gcc-recruitment-academy-training-manual.pdf"
-          title="GCC Recruitment Academy complete training manual"
-          className="w-full h-[620px] border-t border-white/5 bg-white"
-        />
+        <div className="mx-5 mb-5 rounded-lg border border-white/10 bg-white/[.03] p-4 text-sm text-muted-foreground">
+          The manual opens in a separate browser tab to avoid blocked embedded-document errors in the app preview.
+        </div>
       </Card>
 
       {/* Search */}
